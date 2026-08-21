@@ -11,11 +11,22 @@ chrome.sidePanel
   .catch((e) => console.error("AppFill: side panel setup failed:", e));
 
 // ============================================================================
-// Restrict the side panel to job-application pages only. Without this it's
-// enabled globally (manifest side_panel.default_path), which is what made it
-// show up on every tab. webNavigation gives us the URL without needing broad
-// host_permissions for every ATS domain.
+// Restrict the side panel to job-application pages only.
+//
+// IMPORTANT: manifest.json's side_panel.default_path makes the panel enabled
+// GLOBALLY (for every tab) by default — that's a Chrome API quirk, not a bug
+// in the per-tab logic below. Per-tab setOptions() calls only override tabs
+// that have actually fired an event since load; any tab that hasn't yet
+// falls back to that global default, which stays "on" otherwise. So we must
+// explicitly flip the GLOBAL default to disabled (a setOptions call with NO
+// tabId) — only then does per-tab enabling become the sole source of truth.
+// This runs at top level so it re-asserts every time the service worker
+// wakes, not just on install.
 // ============================================================================
+
+chrome.sidePanel
+  .setOptions({ enabled: false, path: "sidepanel.html" })
+  .catch((e) => console.error("AppFill: global panel disable failed:", e));
 
 const ATS_URL_PATTERNS = [
   /ashbyhq\.com/i,
@@ -55,26 +66,41 @@ chrome.webNavigation.onCommitted.addListener((details) => {
 });
 
 // Covers switching to a tab that was already open before this listener ran.
+// Uses webNavigation.getAllFrames instead of chrome.tabs.get, since tabs.get
+// without the "tabs" permission strips the url field for tabs outside our
+// host_permissions — webNavigation always exposes it.
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   try {
-    const tab = await chrome.tabs.get(tabId);
-    updatePanelForTab(tabId, tab.url);
+    const frames = await chrome.webNavigation.getAllFrames({ tabId });
+    const top = frames?.find((f) => f.frameId === 0);
+    updatePanelForTab(tabId, top?.url);
   } catch {
-    // Tab may have closed already — safe to ignore.
+    // No frame info yet (e.g. chrome:// tabs) — leave as global default (off).
   }
 });
 
 // Sweep all currently-open tabs once on install/update/browser restart, so
 // tabs opened before this logic existed get corrected immediately instead of
 // waiting for their next navigation.
-chrome.runtime.onInstalled.addListener(async () => {
+async function sweepAllTabs() {
   try {
     const tabs = await chrome.tabs.query({});
-    tabs.forEach((t) => updatePanelForTab(t.id, t.url));
+    for (const t of tabs) {
+      try {
+        const frames = await chrome.webNavigation.getAllFrames({ tabId: t.id });
+        const top = frames?.find((f) => f.frameId === 0);
+        await updatePanelForTab(t.id, top?.url);
+      } catch {
+        /* tab has no accessible frame info — leave disabled */
+      }
+    }
   } catch {
     /* ignore */
   }
-});
+}
+
+chrome.runtime.onInstalled.addListener(sweepAllTabs);
+chrome.runtime.onStartup.addListener(sweepAllTabs);
 
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";
 const MAX_BULLET_CHARS = 165; // ~2 lines in Jake's template at 11pt
@@ -129,6 +155,7 @@ function extractResumeItems(tex) {
     const hit = tex.indexOf(NEEDLE, i);
     if (hit === -1) break;
 
+    // Must not be a longer command like \resumeItemListStart.
     const after = tex[hit + NEEDLE.length];
     if (after !== "{" && !/\s/.test(after || "")) {
       i = hit + NEEDLE.length;
@@ -147,7 +174,7 @@ function extractResumeItems(tex) {
     let k = bodyStart;
     while (k < tex.length && depth > 0) {
       const c = tex[k];
-      if (c === "\\") { k += 2; continue; }
+      if (c === "\\") { k += 2; continue; } // skip escaped char
       if (c === "{") depth++;
       else if (c === "}") depth--;
       if (depth === 0) break;
@@ -199,11 +226,15 @@ function isValidBullet(candidate, original) {
   if (!bracesBalanced(candidate)) return false;
   if (countOccurrences(candidate, "\\textbf") > MAX_TEXTBF_PER_BULLET) return false;
 
+  // A bare & % $ (not preceded by \) will crash pdflatex.
   if (/(^|[^\\])[&%$]/.test(candidate)) return false;
 
+  // No new LaTeX commands beyond \textbf.
   const cmds = (s) => (s.match(/\\[a-zA-Z]+/g) || []).filter((c) => c !== "\\textbf").sort();
   if (JSON.stringify(cmds(candidate)) !== JSON.stringify(cmds(original))) return false;
 
+  // Metric traceability: any number in the candidate must also appear in the
+  // original bullet (prevents a fabricated statistic slipping through).
   const nums = (s) => (s.match(/\d[\d,.]*%?/g) || []);
   const candNums = nums(candidate);
   const origNums = nums(original);
@@ -234,7 +265,7 @@ Return ONLY a JSON array of the rewritten bullet strings, same length and order 
 async function tailorLatexResume({ apiKey, resumeText, jobText, jobTitle }) {
   const items = extractResumeItems(resumeText);
   if (items.length === 0) {
-    return null;
+    return null; // no \resumeItem structure found; caller should fall back
   }
 
   const originals = items.map((it) => it.body);
@@ -254,7 +285,7 @@ async function tailorLatexResume({ apiKey, resumeText, jobText, jobTitle }) {
   try {
     rewritten = JSON.parse(clean);
   } catch {
-    return null;
+    return null; // malformed response; caller should fall back
   }
   if (!Array.isArray(rewritten) || rewritten.length !== originals.length) {
     return null;
@@ -272,7 +303,7 @@ async function tailorLatexResume({ apiKey, resumeText, jobText, jobTitle }) {
   });
 
   const newTex = spliceResumeItems(resumeText, items, finalBodies);
-  if (!bracesBalanced(newTex)) return null;
+  if (!bracesBalanced(newTex)) return null; // belt-and-suspenders; caller falls back
 
   return {
     result: newTex,
@@ -398,6 +429,7 @@ If you cannot confidently map a field, omit it. No markdown, no explanation.`;
             if (surgical) {
               return sendResponse({ result: surgical.result, changes: surgical.changes, isLatex: true });
             }
+            // surgical path declined (no \resumeItem found, or model output unusable) — fall back below
           } catch (e) {
             console.warn("AppFill: surgical LaTeX tailoring failed, falling back:", e);
           }
