@@ -1,7 +1,14 @@
 // background.js — service worker.
 // Handles all calls to the Anthropic API: ambiguous field mapping,
-// resume tailoring, and cold outreach drafting. Uses your own API key,
-// stored locally, never sent anywhere but api.anthropic.com.
+// resume tailoring, cold outreach drafting, and job match scoring.
+// Uses your own API key, stored locally, never sent anywhere but
+// api.anthropic.com.
+
+// Open the side panel (not a popup) so the UI stays docked open across tab
+// switches instead of closing the moment focus leaves it.
+chrome.sidePanel
+  .setPanelBehavior({ openPanelOnActionClick: true })
+  .catch((e) => console.error("AppFill: side panel setup failed:", e));
 
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";
 const MAX_BULLET_CHARS = 165; // ~2 lines in Jake's template at 11pt
@@ -338,6 +345,63 @@ If you cannot confidently map a field, omit it. No markdown, no explanation.`;
 
         const whole = await tailorWholeResume({ apiKey, resumeText, jobText, jobTitle, isLatex });
         sendResponse({ result: whole.result, changes: whole.changes, isLatex });
+      } catch (e) {
+        sendResponse({ error: String(e) });
+      }
+    })();
+    return true;
+  }
+
+  // ---------- Job match score ----------
+  if (msg.action === "matchScore") {
+    (async () => {
+      try {
+        const { apiKey, resumeText, profile, jobText, jobTitle, company } = msg;
+        if (!apiKey) return sendResponse({ error: "No API key set." });
+        if (!resumeText && !profile) return sendResponse({ error: "Add your resume or fill in your profile first." });
+
+        const profileSummary = profile
+          ? Object.entries(profile)
+              .filter(([k]) => k !== "apiKey" && k !== "resumeText")
+              .map(([k, v]) => `${k}: ${v}`)
+              .join("\n")
+          : "";
+
+        const prompt = `You are evaluating how well a candidate matches a job posting, based ONLY on what's provided below. Do not invent or assume anything about the candidate beyond this.
+
+JOB POSTING${jobTitle ? ` (${jobTitle})` : ""}${company ? ` at ${company}` : ""}:
+"""
+${jobText.slice(0, 6000)}
+"""
+
+CANDIDATE RESUME:
+"""
+${(resumeText || "").slice(0, 6000)}
+"""
+
+CANDIDATE PROFILE NOTES:
+"""
+${profileSummary}
+"""
+
+Score the match from 0-100, where 100 means the candidate meets or exceeds every stated requirement and 0 means almost no overlap. Be honest and calibrated — most real candidates land 40-75, reserve 85+ for a genuinely strong fit. Weigh REQUIRED qualifications heavily; weigh "nice to have" or preferred qualifications lightly.
+
+Respond in exactly this format, no other text:
+SCORE: <integer 0-100>
+STRENGTHS:
+- <specific overlap between resume and posting, one line>
+- <specific overlap, one line>
+GAPS:
+- <specific requirement the resume doesn't show, one line>
+- <specific requirement the resume doesn't show, one line>
+VERDICT: <one honest sentence on whether this is worth applying to>`;
+
+        const text = await callClaude(apiKey, { prompt, maxTokens: 700 });
+
+        const scoreMatch = text.match(/SCORE:\s*(\d{1,3})/i);
+        const score = scoreMatch ? Math.max(0, Math.min(100, parseInt(scoreMatch[1], 10))) : null;
+
+        sendResponse({ score, raw: text });
       } catch (e) {
         sendResponse({ error: String(e) });
       }

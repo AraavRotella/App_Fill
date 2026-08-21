@@ -1,23 +1,19 @@
 {
   "manifest_version": 3,
   "name": "AppFill – Job Application Autofill",
-  "version": "1.0.0",
-  "description": "Fills job application forms from your saved profile, with optional Claude-powered field mapping.",
-  "permissions": [
-    "storage",
-    "activeTab",
-    "scripting",
-    "clipboardWrite",
-    "webNavigation"
-  ],
+  "version": "1.1.0",
+  "description": "Fills job application forms from your saved profile, with optional Claude-powered field mapping and job match scoring.",
+  "permissions": ["storage", "activeTab", "scripting", "clipboardWrite", "webNavigation", "sidePanel"],
   "host_permissions": [
     "https://api.anthropic.com/*",
     "https://jobs.ashbyhq.com/*",
     "https://*.ashbyhq.com/*"
   ],
   "action": {
-    "default_popup": "popup.html",
     "default_title": "AppFill"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
   },
   "background": {
     "service_worker": "background.js"

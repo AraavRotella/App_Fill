@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #14161c;
+    --panel: #1c1f28;
+    --line: #2b2f3d;
+    --text: #e8eaf0;
+    --muted: #8b90a1;
+    --accent: #5eead4;
+    --accent-dim: #134e4a;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    min-width: 300px;
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
+    padding: 14px;
+  }
+  h1 {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin-bottom: 2px;
+  }
+  h1 span { color: var(--accent); }
+  .sub { color: var(--muted); font-size: 11.5px; margin-bottom: 12px; }
+
+  .fill-btn {
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #06251f;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-bottom: 8px;
+  }
+  .fill-btn:hover { filter: brightness(1.08); }
+  .fill-btn:disabled { opacity: 0.5; cursor: wait; }
+
+  .action-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .secondary-btn {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--panel);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .secondary-btn:hover { border-color: var(--accent); }
+  .secondary-btn:disabled { opacity: 0.5; cursor: wait; }
+
+  .result-panel {
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 10px;
+    background: var(--accent-dim);
+    font-size: 11.5px;
+    font-weight: 700;
+  }
+  .mini-btn {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 5px;
+    padding: 3px 8px;
+    font-size: 10.5px;
+    cursor: pointer;
+    margin-left: 4px;
+  }
+  #resultText {
+    width: 100%;
+    height: 220px;
+    border: none;
+    border-radius: 0;
+    resize: vertical;
+    font-family: ui-monospace, monospace;
+    font-size: 11.5px;
+  }
+
+  #status {
+    min-height: 18px;
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  #status.ok { color: var(--accent); }
+  #status.warn { color: #fbbf24; }
+
+  details {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    overflow: hidden;
+  }
+  summary {
+    padding: 9px 12px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 12.5px;
+    user-select: none;
+  }
+  summary::marker { color: var(--accent); }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 4px 12px 12px;
+  }
+  .grid .full { grid-column: 1 / -1; }
+  label { display: block; }
+  label .lbl {
+    display: block;
+    font-size: 10.5px;
+    color: var(--muted);
+    margin-bottom: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  input, textarea, select {
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    color: var(--text);
+    font: inherit;
+    font-size: 12.5px;
+  }
+  input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  textarea { resize: vertical; min-height: 60px; }
+
+  .save-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 4px;
+  }
+  .save-btn {
+    padding: 7px 16px;
+    border: 1px solid var(--accent);
+    background: transparent;
+    color: var(--accent);
+    border-radius: 7px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .save-btn:hover { background: var(--accent-dim); }
+  #saveMsg { font-size: 11px; color: var(--accent); opacity: 0; transition: opacity .3s; }
+  .hint { font-size: 10.5px; color: var(--muted); padding: 0 12px 10px; }
+  #resultHint { padding: 8px 10px; margin: 0; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <h1>App<span>Fill</span></h1>
+  <div class="sub">Autofill job applications from your saved profile.</div>
+
+  <button id="fillBtn" class="fill-btn">Fill this page</button>
+  <div class="action-row">
+    <button id="tailorBtn" class="secondary-btn">✨ Tailor resume</button>
+    <button id="outreachBtn" class="secondary-btn">✉️ Draft outreach</button>
+  </div>
+  <button id="scoreBtn" class="secondary-btn" style="width:100%; margin-bottom:8px;">🎯 Score my fit for this job</button>
+  <div id="status"></div>
+
+  <div id="scorePanel" class="result-panel" style="display:none;">
+    <div class="result-header">
+      <span id="scoreTitle">Match score</span>
+      <button id="closeScoreBtn" class="mini-btn">✕</button>
+    </div>
+    <div id="scoreBadge" style="padding:14px; text-align:center; font-size:32px; font-weight:800;"></div>
+    <div id="scoreBody" style="padding:0 12px 12px; white-space:pre-wrap; font-size:12px; line-height:1.5;"></div>
+  </div>
+
+  <div id="resultPanel" class="result-panel" style="display:none;">
+    <div class="result-header">
+      <span id="resultTitle">Result</span>
+      <div>
+        <button id="downloadBtn" class="mini-btn">Download</button>
+        <button id="copyBtn" class="mini-btn">Copy</button>
+        <button id="closeResultBtn" class="mini-btn">✕</button>
+      </div>
+    </div>
+    <textarea id="resultText" readonly></textarea>
+    <div id="resultHint" class="hint" style="display:none;"></div>
+  </div>
+
+  <details open>
+    <summary>Basics</summary>
+    <div class="grid">
+      <label><span class="lbl">First name</span><input data-k="firstName"></label>
+      <label><span class="lbl">Last name</span><input data-k="lastName"></label>
+      <label class="full"><span class="lbl">Email</span><input data-k="email" type="email"></label>
+      <label class="full"><span class="lbl">Phone</span><input data-k="phone"></label>
+      <label class="full"><span class="lbl">Address line 1</span><input data-k="address1"></label>
+      <label><span class="lbl">City</span><input data-k="city"></label>
+      <label><span class="lbl">State</span><input data-k="state"></label>
+      <label><span class="lbl">ZIP</span><input data-k="zip"></label>
+      <label><span class="lbl">Country</span><input data-k="country"></label>
+    </div>
+  </details>
+
+  <details>
+    <summary>Links & education</summary>
+    <div class="grid">
+      <label class="full"><span class="lbl">LinkedIn</span><input data-k="linkedin"></label>
+      <label class="full"><span class="lbl">GitHub</span><input data-k="github"></label>
+      <label class="full"><span class="lbl">Portfolio / website</span><input data-k="portfolio"></label>
+      <label class="full"><span class="lbl">School</span><input data-k="school"></label>
+      <label><span class="lbl">Degree</span><input data-k="degree"></label>
+      <label><span class="lbl">Major</span><input data-k="major"></label>
+      <label><span class="lbl">GPA</span><input data-k="gpa"></label>
+      <label><span class="lbl">Grad date</span><input data-k="gradDate" placeholder="May 2027"></label>
+      <label class="full"><span class="lbl">Minor</span><input data-k="minor"></label>
+    </div>
+  </details>
+
+  <details>
+    <summary>Work & answers</summary>
+    <div class="grid">
+      <label class="full"><span class="lbl">Current company</span><input data-k="currentCompany"></label>
+      <label class="full"><span class="lbl">Current title</span><input data-k="currentTitle"></label>
+      <label><span class="lbl">Work authorized? (Yes/No)</span><input data-k="workAuth"></label>
+      <label><span class="lbl">Need sponsorship? (Yes/No)</span><input data-k="sponsorship"></label>
+      <label class="full"><span class="lbl">Salary expectation</span><input data-k="salary"></label>
+      <label class="full"><span class="lbl">How did you hear about us</span><input data-k="referral"></label>
+      <label class="full"><span class="lbl">Your resume — plain text OR full LaTeX (.tex) source, paste as-is</span><textarea data-k="resumeText" style="min-height:90px;"></textarea></label>
+      <label class="full"><span class="lbl">Projects (for "describe a project" fields)</span><textarea data-k="projects"></textarea></label>
+      <label class="full"><span class="lbl">Default cover letter / "why us" answer</span><textarea data-k="coverLetter"></textarea></label>
+    </div>
+  </details>
+
+  <details>
+    <summary>Self-ID (optional)</summary>
+    <div class="grid">
+      <label><span class="lbl">Gender</span><input data-k="gender"></label>
+      <label><span class="lbl">Pronouns</span><input data-k="pronouns"></label>
+      <label class="full"><span class="lbl">Race / ethnicity</span><input data-k="race"></label>
+      <label><span class="lbl">Veteran status</span><input data-k="veteran"></label>
+      <label><span class="lbl">Disability status</span><input data-k="disability"></label>
+    </div>
+    <div class="hint">Leave blank to skip these fields entirely.</div>
+  </details>
+
+  <details>
+    <summary>AI mapping (optional)</summary>
+    <div class="grid">
+      <label class="full"><span class="lbl">Anthropic API key</span><input data-k="apiKey" type="password" placeholder="sk-ant-..."></label>
+    </div>
+    <div class="hint">Stored locally in Chrome. When set, fields the built-in matcher can't identify get mapped by Claude Haiku (a fraction of a cent per page). Without it, AppFill still fills all standard fields.</div>
+  </details>
+
+  <div class="save-row">
+    <button id="saveBtn" class="save-btn">Save profile</button>
+    <span id="saveMsg">Saved ✓</span>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
