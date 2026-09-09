@@ -3,11 +3,19 @@
   "name": "AppFill – Job Application Autofill",
   "version": "1.1.0",
   "description": "Fills job application forms from your saved profile, with optional Claude-powered field mapping and job match scoring.",
-  "permissions": ["storage", "activeTab", "scripting", "clipboardWrite", "webNavigation", "sidePanel"],
+  "permissions": ["storage", "activeTab", "tabs", "scripting", "clipboardWrite", "webNavigation", "sidePanel"],
   "host_permissions": [
     "https://api.anthropic.com/*",
-    "https://jobs.ashbyhq.com/*",
-    "https://*.ashbyhq.com/*"
+    "https://*.ashbyhq.com/*",
+    "https://*.greenhouse.io/*",
+    "https://*.lever.co/*",
+    "https://*.myworkdayjobs.com/*",
+    "https://*.icims.com/*",
+    "https://*.smartrecruiters.com/*",
+    "https://*.taleo.net/*",
+    "https://*.jobvite.com/*",
+    "https://*.workable.com/*",
+    "https://*.breezy.hr/*"
   ],
   "action": {
     "default_title": "AppFill"
