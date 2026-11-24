@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a1428">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AI Brief">
+<title>AI Brief</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <div>
+      <div class="greet" id="greet">Good morning</div>
+      <h1>AI <span>Brief</span></h1>
+      <div class="date" id="today"></div>
+    </div>
+    <div class="top-right">
+      <div class="streak" id="streak" title="Days in a row">🔥 0</div>
+      <button class="icon-btn" id="settingsBtn" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+
+  <!-- Audio briefing widget -->
+  <section class="widget player" id="player">
+    <div class="player-top">
+      <div>
+        <div class="w-label">Morning briefing</div>
+        <div class="player-title" id="playerTitle">Tap play to hear today's brief</div>
+      </div>
+      <div class="player-time" id="playerMeta">—</div>
+    </div>
+    <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="player-controls">
+      <button class="ctl" id="prevBtn" aria-label="Previous">⏮</button>
+      <button class="ctl play" id="playBtn" aria-label="Play">▶</button>
+      <button class="ctl" id="nextBtn" aria-label="Next">⏭</button>
+      <button class="chip-btn" id="speedBtn">1.0×</button>
+    </div>
+  </section>
+
+  <!-- Tabs -->
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="news">News</button>
+    <button class="tab" data-tab="drill">Interview</button>
+    <button class="tab" data-tab="saved">Saved</button>
+  </nav>
+
+  <!-- NEWS -->
+  <section class="view" id="view-news">
+    <div class="widget coach hidden" id="coachCard">
+      <div class="w-label">✦ AI coach take</div>
+      <div id="coachText" class="coach-text"></div>
+    </div>
+    <div class="chips" id="filterChips">
+      <button class="chip active" data-filter="all">All</button>
+      <button class="chip" data-filter="news">Headlines</button>
+      <button class="chip" data-filter="research">Research</button>
+      <button class="chip" data-filter="repos">Repos</button>
+      <button class="chip" data-filter="learn">Learn</button>
+    </div>
+    <div class="status" id="newsStatus">Loading…</div>
+    <div id="newsList" class="list"></div>
+    <button class="refresh" id="refreshBtn">↻ Refresh</button>
+  </section>
+
+  <!-- INTERVIEW DRILL -->
+  <section class="view hidden" id="view-drill">
+    <div class="drill-head">
+      <div class="w-label">Today's drill · 4 cards</div>
+      <div class="drill-score" id="drillScore"></div>
+    </div>
+    <div id="drillList" class="list"></div>
+    <button class="refresh" id="shuffleBtn">⤮ Another set</button>
+  </section>
+
+  <!-- SAVED -->
+  <section class="view hidden" id="view-saved">
+    <div id="savedList" class="list"></div>
+  </section>
+
+  <footer class="foot">Sources: Hacker News · Hugging Face Papers · GitHub · DEV</footer>
+</div>
+
+<!-- Settings sheet -->
+<div class="sheet hidden" id="sheet">
+  <div class="sheet-card">
+    <div class="sheet-head"><h2>Settings</h2><button class="icon-btn" id="closeSheet">✕</button></div>
+
+    <label class="field"><span>Your name (for the greeting)</span>
+      <input id="nameInput" placeholder="optional"></label>
+
+    <label class="field"><span>Voice</span>
+      <select id="voiceSelect"></select></label>
+
+    <label class="field"><span>Headlines in the audio brief</span>
+      <select id="countSelect"><option>5</option><option selected>8</option><option>12</option></select></label>
+
+    <label class="field"><span>Focus keywords (comma separated) — boosts matching stories</span>
+      <input id="focusInput" placeholder="e.g. rust, agents, system design"></label>
+
+    <div class="divider"></div>
+    <div class="w-label">Optional: AI coach</div>
+    <p class="hint">Paste an Anthropic API key to get a short "what this means for you as a programmer" take on today's news, read out in the audio brief. The key is stored only on this phone and is sent only to api.anthropic.com.</p>
+    <label class="field"><span>Anthropic API key</span>
+      <input id="keyInput" type="password" placeholder="sk-ant-…" autocomplete="off"></label>
+
+    <div class="sheet-actions">
+      <button class="secondary" id="clearCache">Clear cache</button>
+      <button class="primary" id="saveSettings">Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="drills.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
