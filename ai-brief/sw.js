@@ -1,5 +1,5 @@
 // Offline shell: cache the app files; network-first so updates show up.
-const CACHE = "ai-brief-v1";
+const CACHE = "ai-brief-v2";
 const SHELL = ["./", "index.html", "styles.css", "app.js", "drills.js", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png"];
 
 self.addEventListener("install", (e) => {

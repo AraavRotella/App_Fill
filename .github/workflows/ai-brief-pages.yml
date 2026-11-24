@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
     paths: ["ai-brief/**", ".github/workflows/ai-brief-pages.yml"]
+  schedule:
+    # Daily brief at 4:00am. GitHub cron is in UTC: 09:00 UTC = 4am US Eastern
+    # (5am during daylight saving). Change the hour for your timezone.
+    - cron: "0 9 * * *"
   workflow_dispatch:
 
 permissions:
@@ -23,6 +27,13 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Fetch today's news
+        run: node ai-brief/tools/fetch-news.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

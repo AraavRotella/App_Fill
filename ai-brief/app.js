@@ -12,7 +12,6 @@
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const todayKey = () => new Date().toISOString().slice(0, 10);
-  const CACHE_MS = 30 * 60 * 1000;
 
   const settings = Object.assign(
     { name: "", voice: "", count: 8, focus: "", apiKey: "", rate: 1.0 },
@@ -39,100 +38,6 @@
     $("#streak").textContent = `🔥 ${s.n}`;
   }
 
-  // ---------- fetching ----------
-  async function getJSON(url, ms = 9000) {
-    const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), ms);
-    try {
-      const r = await fetch(url, { signal: ctl.signal, headers: { Accept: "application/json" } });
-      if (!r.ok) throw new Error(r.status);
-      return await r.json();
-    } finally { clearTimeout(t); }
-  }
-
-  const AI_RE = /\b(ai|a\.i\.|llms?|gpt[-\w]*|claude|gemini|llama|mistral|openai|anthropic|deepmind|hugging ?face|transformer|neural|machine learning|ml|deep learning|agents?|agentic|rag|embedding|diffusion|inference|fine-?tun\w*|copilot|cursor|model|models|prompt\w*|token\w*|vector|gpu|nvidia|reasoning|chatbot|mcp)\b/i;
-  const PROG_RE = /\b(code|coding|programm\w*|developer|engineer\w*|rust|python|typescript|javascript|go|compiler|open source|github|api|sdk|framework|database|kubernetes|benchmark|library|tool\w*|ide|terminal)\b/i;
-
-  async function fromHN() {
-    const since = Math.floor(Date.now() / 1000) - 36 * 3600;
-    const d = await getJSON(`https://hn.algolia.com/api/v1/search?tags=story&numericFilters=created_at_i>${since},points>40&hitsPerPage=100`);
-    return d.hits
-      .filter((h) => h.title && AI_RE.test(h.title))
-      .map((h) => ({
-        id: "hn-" + h.objectID,
-        cat: "news",
-        source: "Hacker News",
-        title: h.title,
-        desc: h.url ? new URL(h.url).hostname.replace(/^www\./, "") : "Discussion",
-        url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`,
-        discuss: `https://news.ycombinator.com/item?id=${h.objectID}`,
-        score: h.points + (h.num_comments || 0) * 0.5 + (PROG_RE.test(h.title) ? 60 : 0),
-        meta: `▲ ${h.points} · ${h.num_comments || 0} comments`,
-        ts: h.created_at_i * 1000,
-      }));
-  }
-
-  async function fromHF() {
-    const d = await getJSON("https://huggingface.co/api/daily_papers?limit=15");
-    return d.map((p) => {
-      const paper = p.paper || p;
-      const summary = (paper.summary || p.summary || "").replace(/\s+/g, " ").trim();
-      return {
-        id: "hf-" + paper.id,
-        cat: "research",
-        source: "HF Papers",
-        title: paper.title || p.title,
-        desc: summary,
-        url: `https://huggingface.co/papers/${paper.id}`,
-        score: (paper.upvotes || 0) * 3 + 40,
-        meta: `▲ ${paper.upvotes || 0} upvotes`,
-        ts: Date.parse(p.publishedAt || paper.publishedAt || Date.now()),
-      };
-    });
-  }
-
-  async function fromGitHub() {
-    const since = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
-    const q = encodeURIComponent(`created:>${since} stars:>50 topic:llm`);
-    const q2 = encodeURIComponent(`created:>${since} stars:>50 topic:ai-agents`);
-    const [a, b] = await Promise.allSettled([
-      getJSON(`https://api.github.com/search/repositories?q=${q}&sort=stars&order=desc&per_page=10`),
-      getJSON(`https://api.github.com/search/repositories?q=${q2}&sort=stars&order=desc&per_page=10`),
-    ]);
-    const items = [...(a.value?.items || []), ...(b.value?.items || [])];
-    const seen = new Set();
-    return items.filter((r) => !seen.has(r.id) && seen.add(r.id)).map((r) => ({
-      id: "gh-" + r.id,
-      cat: "repos",
-      source: "GitHub",
-      title: r.full_name,
-      desc: r.description || "",
-      url: r.html_url,
-      score: Math.min(r.stargazers_count, 3000) / 6 + 30,
-      meta: `★ ${r.stargazers_count.toLocaleString()} · ${r.language || "—"}`,
-      ts: Date.parse(r.created_at),
-    }));
-  }
-
-  async function fromDev() {
-    const [a, b] = await Promise.allSettled([
-      getJSON("https://dev.to/api/articles?tag=ai&top=2&per_page=12"),
-      getJSON("https://dev.to/api/articles?tag=machinelearning&top=3&per_page=8"),
-    ]);
-    const seen = new Set();
-    return [...(a.value || []), ...(b.value || [])].filter((x) => !seen.has(x.id) && seen.add(x.id)).map((x) => ({
-      id: "dev-" + x.id,
-      cat: "learn",
-      source: "DEV",
-      title: x.title,
-      desc: x.description || "",
-      url: x.url,
-      score: (x.positive_reactions_count || 0) / 2 + 20,
-      meta: `♥ ${x.positive_reactions_count || 0} · ${x.reading_time_minutes || "?"} min read`,
-      ts: Date.parse(x.published_at),
-    }));
-  }
-
   function focusBoost(item) {
     const words = settings.focus.split(",").map((w) => w.trim().toLowerCase()).filter(Boolean);
     const hay = (item.title + " " + item.desc).toLowerCase();
@@ -142,42 +47,38 @@
   let items = [];
   let filter = "all";
 
-  async function loadNews(force = false) {
+  // News is fetched once a day at 4am by a scheduled job (tools/fetch-news.mjs)
+  // and published as data/news.json. Opening the app only reads that file.
+  async function loadNews(manual = false) {
     const cached = store.get("news", null);
-    if (!force && cached && Date.now() - cached.at < CACHE_MS) {
-      items = cached.items;
-      setStatus(cached);
-      renderNews();
-      return;
+    if (cached && !manual) { applyNews(cached); } // instant paint from last copy
+    else $("#newsStatus").textContent = "Loading today's brief…";
+    try {
+      const r = await fetch("data/news.json", { cache: "no-cache" });
+      if (!r.ok) throw new Error(r.status);
+      const data = await r.json();
+      if (cached && cached.generatedAt === data.generatedAt && !manual) return maybeCoach(false);
+      store.set("news", data);
+      applyNews(data);
+      maybeCoach(false);
+    } catch {
+      if (cached) { applyNews(cached); $("#newsStatus").textContent += " · offline"; }
+      else $("#newsStatus").textContent = "Couldn't load today's brief. Check your connection.";
     }
-    $("#newsStatus").textContent = "Fetching the latest…";
-    const sources = [["Hacker News", fromHN], ["HF Papers", fromHF], ["GitHub", fromGitHub], ["DEV", fromDev]];
-    const results = await Promise.allSettled(sources.map(([, fn]) => fn()));
-    const failed = [];
-    let all = [];
-    results.forEach((r, i) => {
-      if (r.status === "fulfilled") all = all.concat(r.value);
-      else failed.push(sources[i][0]);
-    });
-    if (!all.length && cached) {
-      items = cached.items;
-      $("#newsStatus").textContent = "Offline — showing your last brief.";
-      renderNews();
-      return;
-    }
-    all.forEach((it) => (it.rank = it.score + focusBoost(it)));
-    items = all;
-    const payload = { at: Date.now(), items, failed };
-    store.set("news", payload);
-    setStatus(payload);
+  }
+
+  function applyNews(data) {
+    items = data.items.map((it) => Object.assign({}, it, { rank: it.score + focusBoost(it) }));
+    setStatus(data);
     renderNews();
-    maybeCoach(force);
   }
 
   function setStatus(p) {
-    const mins = Math.round((Date.now() - p.at) / 60000);
-    let s = `${p.items.length} stories · updated ${mins < 1 ? "just now" : mins + " min ago"}`;
-    if (p.failed && p.failed.length) s += ` · couldn't reach ${p.failed.join(", ")}`;
+    const when = new Date(p.generatedAt);
+    const sameDay = when.toDateString() === new Date().toDateString();
+    const label = when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    let s = `${p.items.length} stories · ${sameDay ? "today's brief" : "from " + when.toLocaleDateString(undefined, { weekday: "short" })}, built ${label}`;
+    if (p.failed && p.failed.length) s += ` · missing ${p.failed.join(", ")}`;
     $("#newsStatus").textContent = s;
   }
 
